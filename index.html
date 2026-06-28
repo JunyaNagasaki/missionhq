@@ -236,7 +236,7 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
       <div class="dg">
         <div class="dc">
           <h3>今日のミッション</h3>
-          <div id="dash-m"><div style="font-size:12px;color:var(--t3)">ミッションタブで確認してください</div></div>
+          <div id="dash-m"></div>
           <button class="btn bp" style="width:100%;margin-top:12px;justify-content:center" onclick="nav('mission')">ミッションを見る</button>
         </div>
         <div class="dc">
@@ -714,7 +714,7 @@ function renderDashM() {
   const ms = missionDefs[tk] || [];
   const done = db.doneMap[tk] || [];
   if (ms.length === 0) {
-    document.getElementById('dash-m').innerHTML = `<div style="font-size:12px;color:var(--t3);padding:8px 0;">ミッションはまだ設定されていません</div>`;
+    document.getElementById('dash-m').innerHTML = '';
     return;
   }
   document.getElementById('dash-m').innerHTML = ms.map((m, i) => {
