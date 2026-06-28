@@ -342,7 +342,7 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
 
 <script>
 const GAS = 'https://script.google.com/macros/s/AKfycbzIKClwERGtKW1ujRSyc1iVROJvN3HvwNrv0Vo58M4AuL5tSQYGPBHsTwb2DGpITAQ/exec';
-const KEY = 'mhq_v9';
+const KEY = 'mhq_v10'; // v10: doneMapをtitle名ベースに移行
 
 // ローカルキャッシュ
 const lc = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
@@ -363,13 +363,20 @@ const tk = tkDate.getFullYear() + '-' +
   String(tkDate.getMonth() + 1).padStart(2, '0') + '-' +
   String(tkDate.getDate()).padStart(2, '0');
 const dow = tkDate.getDay();
+const DJ = ['日','月','火','水','木','金','土'];
+
+// JST日付をYYYY-MM-DD文字列で返す
 function isoJST(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth()+1).padStart(2,'0');
   const day = String(d.getDate()).padStart(2,'0');
   return y+'-'+m+'-'+day;
 }
-const DJ = ['日','月','火','水','木','金','土'];
+
+// doneMapはタイトル名ベースで管理（デバイス間で確実に同期するため）
+function isDoneMission(dateKey, title) {
+  return (db.doneMap[dateKey] || []).includes(title);
+}
 const DJF = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
 const dateStr = now.toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
 document.getElementById('sb-date').textContent = dateStr;
@@ -452,24 +459,21 @@ async function loadFromSheets() {
     if (missions && missions.length > 0) {
       const doneMissions = missions.filter(m => m.done);
 
-      // GASデータからdoneMapを構築（日付×missionDefs内のindex）
+      // GASデータからdoneMapを構築（タイトル名ベース）
       const gasDoneMap = {};
       doneMissions.forEach(tm => {
         const isoKey = normalizeDate(tm.date);
-        const ms = missionDefs[isoKey] || [];
-        const mIdx = ms.findIndex(m => m.title === tm.title);
-        if (mIdx < 0) return;
         if (!gasDoneMap[isoKey]) gasDoneMap[isoKey] = [];
-        if (!gasDoneMap[isoKey].includes(mIdx)) gasDoneMap[isoKey].push(mIdx);
+        if (!gasDoneMap[isoKey].includes(tm.title)) gasDoneMap[isoKey].push(tm.title);
       });
 
       // GASを正とし、localStorageとマージ（どちらかにあればON）
       const merged = {};
       const allDates = new Set([...Object.keys(db.doneMap), ...Object.keys(gasDoneMap)]);
       allDates.forEach(date => {
-        const local = db.doneMap[date] || [];
-        const gas = gasDoneMap[date] || [];
-        const combined = [...new Set([...local, ...gas])];
+        const localTitles = (db.doneMap[date] || []).filter(v => typeof v === 'string');
+        const gasTitles = gasDoneMap[date] || [];
+        const combined = [...new Set([...gasTitles, ...localTitles])];
         if (combined.length > 0) merged[date] = combined;
       });
       db.doneMap = merged;
@@ -626,7 +630,7 @@ function renderMissions() {
 
   let html = '';
   ms.forEach((m, i) => {
-    const isDone = done.includes(i);
+    const isDone = isDoneMission(selectedDate, m.title);
     const cc = catColor(m.cat);
     html += `<div class="mc ${isDone?'done':''}" onclick="togM(${i})">
       <div class="chk ${isDone?'done':''}"></div>
@@ -654,10 +658,10 @@ function togM(i) {
 
   const dateKey = selectedDate;
   if (!db.doneMap[dateKey]) db.doneMap[dateKey] = [];
-  const idx = db.doneMap[dateKey].indexOf(i);
-  const nowDone = idx === -1;
-  if (idx > -1) db.doneMap[dateKey].splice(idx, 1);
-  else db.doneMap[dateKey].push(i);
+  const titleIdx = db.doneMap[dateKey].indexOf(m.title);
+  const nowDone = titleIdx === -1;
+  if (titleIdx > -1) db.doneMap[dateKey].splice(titleIdx, 1);
+  else db.doneMap[dateKey].push(m.title);
 
   if (selectedDate === tk) {
     // ストリーク再計算
@@ -725,7 +729,7 @@ function renderDashM() {
     return;
   }
   document.getElementById('dash-m').innerHTML = ms.map((m, i) => {
-    const isDone = done.includes(i);
+    const isDone = isDoneMission(tk, m.title);
     const cc = catColor(m.cat);
     return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--b);cursor:pointer" onclick="nav('mission')">
       <div class="chk ${isDone?'done':''}" style="width:18px;height:18px;margin-top:1px"></div>
