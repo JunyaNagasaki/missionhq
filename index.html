@@ -363,6 +363,12 @@ const tk = tkDate.getFullYear() + '-' +
   String(tkDate.getMonth() + 1).padStart(2, '0') + '-' +
   String(tkDate.getDate()).padStart(2, '0');
 const dow = tkDate.getDay();
+function isoJST(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
 const DJ = ['日','月','火','水','木','金','土'];
 const DJF = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
 const dateStr = now.toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
@@ -437,7 +443,7 @@ async function loadFromSheets() {
     }
 
     // ミッション定義（動的）
-    if (missionDefsData && typeof missionDefsData === 'object') {
+    if (missionDefsData && typeof missionDefsData === 'object' && Object.keys(missionDefsData).length > 0) {
       missionDefs = missionDefsData;
       db.missionDefs = missionDefs;
     }
@@ -457,13 +463,14 @@ async function loadFromSheets() {
         if (!gasDoneMap[isoKey].includes(mIdx)) gasDoneMap[isoKey].push(mIdx);
       });
 
-      // localStorageとGASをマージ
-      const merged = { ...db.doneMap };
-      Object.entries(gasDoneMap).forEach(([date, indices]) => {
-        if (!merged[date]) merged[date] = [];
-        indices.forEach(idx => {
-          if (!merged[date].includes(idx)) merged[date].push(idx);
-        });
+      // GASを正とし、localStorageとマージ（どちらかにあればON）
+      const merged = {};
+      const allDates = new Set([...Object.keys(db.doneMap), ...Object.keys(gasDoneMap)]);
+      allDates.forEach(date => {
+        const local = db.doneMap[date] || [];
+        const gas = gasDoneMap[date] || [];
+        const combined = [...new Set([...local, ...gas])];
+        if (combined.length > 0) merged[date] = combined;
       });
       db.doneMap = merged;
 
@@ -487,7 +494,7 @@ async function loadFromSheets() {
         checkDate.setDate(checkDate.getDate() - 1);
       }
       for (let i = doneDates.length - 1; i >= 0; i--) {
-        const expected = checkDate.toISOString().split('T')[0];
+        const expected = isoJST(checkDate);
         if (doneDates[i] === expected) {
           streak++;
           checkDate.setDate(checkDate.getDate() - 1);
@@ -661,7 +668,7 @@ function togM(i) {
       checkDate2.setDate(checkDate2.getDate() - 1);
     }
     for (let j = doneDates2.length - 1; j >= 0; j--) {
-      const expected2 = checkDate2.toISOString().split('T')[0];
+      const expected2 = isoJST(checkDate2);
       if (doneDates2[j] === expected2) {
         streak2++;
         checkDate2.setDate(checkDate2.getDate() - 1);
