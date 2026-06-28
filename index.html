@@ -356,8 +356,10 @@ if (!db.memos) db.memos = [];
 if (!db.clients) db.clients = ['Olu.', 'Toei', 'Kawabe', 'HEMO', 'その他'];
 
 const now = new Date();
-const tk = now.toISOString().split('T')[0];
-const dow = now.getDay();
+// JSTで今日の日付を取得（UTC+9補正）
+const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+const tk = jstNow.toISOString().split('T')[0];
+const dow = new Date(now.getTime() + 9 * 60 * 60 * 1000).getDay();
 const DJ = ['日','月','火','水','木','金','土'];
 const DJF = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
 const dateStr = now.toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
