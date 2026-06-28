@@ -354,6 +354,7 @@ if (!db.missionHistory) db.missionHistory = [];
 if (!db.streak) db.streak = 0;
 if (!db.memos) db.memos = [];
 if (!db.clients) db.clients = ['Olu.', 'Toei', 'Kawabe', 'HEMO', 'その他'];
+if (!db.missionDefs) db.missionDefs = {};
 
 const now = new Date();
 // JSTで今日の日付を取得（toLocaleDateStringでJST確定）
@@ -438,6 +439,7 @@ async function loadFromSheets() {
     // ミッション定義（動的）
     if (missionDefsData && typeof missionDefsData === 'object') {
       missionDefs = missionDefsData;
+      db.missionDefs = missionDefs;
     }
 
     // ミッション達成記録
@@ -550,7 +552,7 @@ function catColor(cat) {
 }
 
 // missionDefs: { 'YYYY-MM-DD': [{index,cat,title,detail,time}, ...] }
-let missionDefs = {};
+let missionDefs = db.missionDefs || {};
 
 // 直近7日の日付リスト（今日を含む過去7日）
 function getLast7Dates() {
