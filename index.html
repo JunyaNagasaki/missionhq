@@ -374,8 +374,12 @@ function isoJST(d) {
 }
 
 // doneMapはタイトル名ベースで管理（デバイス間で確実に同期するため）
+// doneMap[dateKey] = ['タイトル1', 'タイトル2', ...]
 function isDoneMission(dateKey, title) {
   return (db.doneMap[dateKey] || []).includes(title);
+}
+function getDoneCount(dateKey) {
+  return (db.doneMap[dateKey] || []).length;
 }
 const DJF = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
 const dateStr = now.toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
@@ -452,14 +456,14 @@ async function loadFromSheets() {
     // ミッション定義（動的）
     if (missionDefsData && typeof missionDefsData === 'object' && Object.keys(missionDefsData).length > 0) {
       missionDefs = missionDefsData;
-      db.missionDefs = missionDefs;
+      db.missionDefs = missionDefs; // ローカルキャッシュにも保存（チラつき防止）
     }
 
     // ミッション達成記録
     if (missions && missions.length > 0) {
       const doneMissions = missions.filter(m => m.done);
 
-      // GASデータからdoneMapを構築（タイトル名ベース）
+      // GASデータからdoneMapを構築（タイトル名ベース・デバイス間同期の正）
       const gasDoneMap = {};
       doneMissions.forEach(tm => {
         const isoKey = normalizeDate(tm.date);
@@ -467,10 +471,11 @@ async function loadFromSheets() {
         if (!gasDoneMap[isoKey].includes(tm.title)) gasDoneMap[isoKey].push(tm.title);
       });
 
-      // GASを正とし、localStorageとマージ（どちらかにあればON）
+      // GASを正として上書き（ローカルの未送信分もマージ）
       const merged = {};
       const allDates = new Set([...Object.keys(db.doneMap), ...Object.keys(gasDoneMap)]);
       allDates.forEach(date => {
+        // ローカルはstring型（タイトル）のみ有効とする（古いindex番号は無視）
         const localTitles = (db.doneMap[date] || []).filter(v => typeof v === 'string');
         const gasTitles = gasDoneMap[date] || [];
         const combined = [...new Set([...gasTitles, ...localTitles])];
@@ -563,12 +568,14 @@ function catColor(cat) {
 }
 
 // missionDefs: { 'YYYY-MM-DD': [{index,cat,title,detail,time}, ...] }
+// ローカルキャッシュから初期値を読み込む（チラつき防止）
 let missionDefs = db.missionDefs || {};
 
-// 直近7日の日付リスト（今日を含む過去7日）
+// 直近7日の日付リスト（今日を含む過去7日・JST基準）
 function getLast7Dates() {
   const dates = [];
   for (let i = 6; i >= 0; i--) {
+    // tkはYYYY-MM-DD文字列（JST）→ 正午で Date化してズレ防止
     const base = new Date(tk + 'T12:00:00+09:00');
     base.setDate(base.getDate() - i);
     const y = base.getFullYear();
@@ -603,10 +610,11 @@ function selectDate(dateStr) {
 
 function renderMissions() {
   const ms = missionDefs[selectedDate] || [];
-  const done = db.doneMap[selectedDate] || [];
+  const doneTitles = db.doneMap[selectedDate] || [];
+  const done = doneTitles; // タイトル配列
   const isToday = selectedDate === tk;
   const total = ms.length;
-  const pct = total > 0 ? Math.round(done.length / total * 100) : 0;
+  const pct = total > 0 ? Math.round(doneTitles.length / total * 100) : 0;
   document.getElementById('prog').style.width = pct + '%';
 
   if (total === 0) {
@@ -625,7 +633,7 @@ function renderMissions() {
   }
 
   document.getElementById('m-sub').textContent = isToday
-    ? `${done.length}/${total} 完了 — 今日のクエスト`
+    ? `${doneTitles.length}/${total} 完了 — 今日のクエスト`
     : `${selectedDate} のミッション（タップで達成チェック可）`;
 
   let html = '';
@@ -656,8 +664,14 @@ function togM(i) {
   togMBusy = true;
   togMLastTime = now2;
 
+  const ms2 = missionDefs[selectedDate] || [];
+  const m = ms2[i];
+  if (!m) { togMBusy = false; return; }
+
   const dateKey = selectedDate;
   if (!db.doneMap[dateKey]) db.doneMap[dateKey] = [];
+
+  // タイトル名でチェック管理（デバイス間で確実に同期）
   const titleIdx = db.doneMap[dateKey].indexOf(m.title);
   const nowDone = titleIdx === -1;
   if (titleIdx > -1) db.doneMap[dateKey].splice(titleIdx, 1);
@@ -667,7 +681,7 @@ function togM(i) {
     // ストリーク再計算
     const doneDates2 = [...new Set(Object.keys(db.doneMap).filter(d => db.doneMap[d].length > 0))].sort();
     let streak2 = 0;
-    let checkDate2 = new Date(tk + 'T12:00:00');
+    let checkDate2 = new Date(tk + 'T12:00:00+09:00');
     if (!db.doneMap[tk] || db.doneMap[tk].length === 0) {
       checkDate2.setDate(checkDate2.getDate() - 1);
     }
@@ -687,29 +701,24 @@ function togM(i) {
   sc(db);
   renderMissions(); renderDashM(); updDash();
 
-  const ms = missionDefs[selectedDate] || [];
-  const m2 = ms[i];
-  if (m2) {
-    if (nowDone) {
-      const alreadyIn = db.missionHistory.some(h => h.date === dateKey && h.title === m2.title);
-      if (!alreadyIn) {
-        const dateObj = new Date(dateKey + 'T12:00:00');
-        const dayName = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'][dateObj.getDay()];
-        db.missionHistory.push({ date: dateKey, dateStr: dateKey, day: dayName, cat: m2.cat, title: m2.title });
-        sc(db);
-      }
-    } else {
-      db.missionHistory = db.missionHistory.filter(h => !(h.date === dateKey && h.title === m2.title));
+  // 履歴更新
+  if (nowDone) {
+    const alreadyIn = db.missionHistory.some(h => h.date === dateKey && h.title === m.title);
+    if (!alreadyIn) {
+      const dateObj = new Date(dateKey + 'T12:00:00+09:00');
+      const dayName = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'][dateObj.getDay()];
+      db.missionHistory.push({ date: dateKey, dateStr: dateKey, day: dayName, cat: m.cat, title: m.title });
       sc(db);
     }
+  } else {
+    db.missionHistory = db.missionHistory.filter(h => !(h.date === dateKey && h.title === m.title));
+    sc(db);
   }
 
   // GASに送信
   clearTimeout(togMTimer);
   togMTimer = setTimeout(() => {
-    const m = (missionDefs[selectedDate] || [])[i];
-    if (!m) { togMBusy = false; return; }
-    const dateObj = new Date(selectedDate + 'T12:00:00');
+    const dateObj = new Date(selectedDate + 'T12:00:00+09:00');
     const dayName = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'][dateObj.getDay()];
     setSync('m', 'loading');
     gasPost({ action:'saveMission', date:dateKey, day:dayName, cat:m.cat, title:m.title, done:nowDone })
@@ -723,8 +732,8 @@ let togMTimer = null;
 
 function renderDashM() {
   const ms = missionDefs[tk] || [];
-  const done = db.doneMap[tk] || [];
   if (ms.length === 0) {
+    // キャッシュがない場合は空のまま（GAS取得後に再描画）
     document.getElementById('dash-m').innerHTML = '';
     return;
   }
@@ -744,7 +753,7 @@ function renderDashM() {
 function updDash() {
   const ms = missionDefs[tk] || [];
   const done = (db.doneMap[tk] || []).length;
-  document.getElementById('d-done').textContent = `${done}/${ms.length}`;
+  document.getElementById('d-done').textContent = `${done}/${ms.length || 0}`;
   document.getElementById('d-str').textContent = db.streak || 0;
   document.getElementById('sb-str').textContent = db.streak || 0;
   const wa = new Date(now); wa.setDate(wa.getDate() - 7);
@@ -1505,7 +1514,7 @@ async function delMemo(i) {
 async function init() {
   buildDayPills();
 
-  // ① ローカルキャッシュで即座に表示
+  // ① ローカルキャッシュで即座に表示（missionDefsキャッシュがあればチラつきなし）
   renderMissions();
   renderTasks();
   updDash();
