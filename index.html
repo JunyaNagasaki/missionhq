@@ -356,10 +356,12 @@ if (!db.memos) db.memos = [];
 if (!db.clients) db.clients = ['Olu.', 'Toei', 'Kawabe', 'HEMO', 'その他'];
 
 const now = new Date();
-// JSTで今日の日付を取得（UTC+9補正）
-const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-const tk = jstNow.toISOString().split('T')[0];
-const dow = new Date(now.getTime() + 9 * 60 * 60 * 1000).getDay();
+// JSTで今日の日付を取得（toLocaleDateStringでJST確定）
+const tkDate = new Date(now.toLocaleString('en-US', {timeZone: 'Asia/Tokyo'}));
+const tk = tkDate.getFullYear() + '-' +
+  String(tkDate.getMonth() + 1).padStart(2, '0') + '-' +
+  String(tkDate.getDate()).padStart(2, '0');
+const dow = tkDate.getDay();
 const DJ = ['日','月','火','水','木','金','土'];
 const DJF = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'];
 const dateStr = now.toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
@@ -554,9 +556,12 @@ let missionDefs = {};
 function getLast7Dates() {
   const dates = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+    const base = new Date(tk + 'T12:00:00+09:00');
+    base.setDate(base.getDate() - i);
+    const y = base.getFullYear();
+    const m = String(base.getMonth() + 1).padStart(2, '0');
+    const d2 = String(base.getDate()).padStart(2, '0');
+    dates.push(y + '-' + m + '-' + d2);
   }
   return dates;
 }
