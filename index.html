@@ -200,6 +200,7 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
     <button class="mb" onclick="nav('task')"><i class="ti ti-checklist"></i>タスク</button>
     <button class="mb" onclick="nav('review')"><i class="ti ti-chart-bar"></i>振り返り</button>
     <button class="mb" onclick="nav('memo')"><i class="ti ti-notebook"></i>メモ</button>
+    <button class="mb" onclick="nav('wish')"><i class="ti ti-bulb"></i>やりたい</button>
   </div>
 </nav>
 
@@ -213,6 +214,7 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
       <button class="nb" onclick="nav('task')"><i class="ti ti-checklist"></i> タスク管理</button>
       <button class="nb" onclick="nav('review')"><i class="ti ti-chart-bar"></i> 振り返り</button>
       <button class="nb" onclick="nav('memo')"><i class="ti ti-notebook"></i> 案件メモ</button>
+      <button class="nb" onclick="nav('wish')"><i class="ti ti-bulb"></i> やりたいことメモ</button>
     </div>
     <div class="streak-box">
       <div class="streak-inner">
@@ -317,6 +319,31 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
       <div class="rc"><h3><i class="ti ti-target"></i> ミッション達成履歴</h3><div id="mission-history"><div style="font-size:13px;color:var(--t3)">達成したミッションがここに残ります</div></div></div>
       <div class="rc"><h3>今週のコメント</h3><div id="r-comment" style="font-size:13px;color:var(--t2);line-height:1.8;margin-top:8px"></div></div>
     </div>
+
+    <!-- WISH LIST -->
+    <div class="page" id="page-wish">
+      <div class="ph"><div><div class="ph-t">やりたいことメモ</div><div class="ph-s">気軽に追加してください</div></div></div>
+      <div style="padding:0 0 16px;">
+        <div style="background:var(--bg2);border-radius:var(--r);padding:16px;margin-bottom:16px;">
+          <div style="font-size:13px;color:var(--t2);margin-bottom:10px;line-height:1.7;">
+            やりたいこと・興味・挑戦したいことを気軽にメモ。<br>
+            週次サマリーに自動で含まれて、Claudeがミッション提案に活かします。
+          </div>
+          <div style="display:flex;gap:8px;">
+            <input id="wish-input" type="text" placeholder="例：テキーラについてもっと学びたい"
+              style="flex:1;background:var(--bg3);border:1px solid var(--b2);border-radius:8px;padding:10px 12px;color:var(--t);font-size:14px;outline:none;"
+              onkeydown="if(event.key==='Enter')addWish()">
+            <button onclick="addWish()"
+              style="background:var(--pu);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">
+              追加
+            </button>
+          </div>
+        </div>
+        <div id="wish-list"></div>
+      </div>
+      <div class="sync-row"><div class="sdot" id="wish-sdot"></div><span id="wish-stxt" class="stxt"></span></div>
+    </div>
+
     <!-- MEMO -->
     <div class="page" id="page-memo">
       <div class="ph">
@@ -355,6 +382,7 @@ if (!db.streak) db.streak = 0;
 if (!db.memos) db.memos = [];
 if (!db.clients) db.clients = ['Olu.', 'Toei', 'Kawabe', 'HEMO', 'その他'];
 if (!db.missionDefs) db.missionDefs = {};
+if (!db.wishList) db.wishList = []; // やりたいことメモ
 
 const now = new Date();
 // JSTで今日の日付を取得（toLocaleDateStringでJST確定）
@@ -427,12 +455,13 @@ async function gasGet(action) {
 async function loadFromSheets() {
   try {
     // 全データを並列取得（直列より高速）
-    const [clientsData, tasks, missions, memos, missionDefsData] = await Promise.all([
+    const [clientsData, tasks, missions, memos, missionDefsData, wishData] = await Promise.all([
       gasGet('getClients'),
       gasGet('getTasks'),
       gasGet('getMissions'),
       gasGet('getMemos'),
-      gasGet('getMissionDefs')
+      gasGet('getMissionDefs'),
+      gasGet('getWishes')
     ]);
 
     // クライアント
@@ -459,7 +488,13 @@ async function loadFromSheets() {
       db.missionDefs = missionDefs; // ローカルキャッシュにも保存（チラつき防止）
     }
 
-    // ミッション達成記録
+    // ミッション達成記録（GASが正・missionsが空の場合はdoneMapもクリア）
+    if (missions !== null && missions !== undefined) {
+      if (missions.length === 0) {
+        // GASにミッション記録がない = 全てチェックなし
+        db.doneMap = {};
+      }
+    }
     if (missions && missions.length > 0) {
       const doneMissions = missions.filter(m => m.done);
 
@@ -471,17 +506,8 @@ async function loadFromSheets() {
         if (!gasDoneMap[isoKey].includes(tm.title)) gasDoneMap[isoKey].push(tm.title);
       });
 
-      // GASを正として上書き（ローカルの未送信分もマージ）
-      const merged = {};
-      const allDates = new Set([...Object.keys(db.doneMap), ...Object.keys(gasDoneMap)]);
-      allDates.forEach(date => {
-        // ローカルはstring型（タイトル）のみ有効とする（古いindex番号は無視）
-        const localTitles = (db.doneMap[date] || []).filter(v => typeof v === 'string');
-        const gasTitles = gasDoneMap[date] || [];
-        const combined = [...new Set([...gasTitles, ...localTitles])];
-        if (combined.length > 0) merged[date] = combined;
-      });
-      db.doneMap = merged;
+      // GASを唯一の真実として完全上書き（ローカルキャッシュは使わない）
+      db.doneMap = gasDoneMap;
 
       // 重複排除した履歴
       const seen = new Set();
@@ -526,6 +552,11 @@ async function loadFromSheets() {
       }));
     }
 
+    // やりたいことメモ
+    if (wishData && wishData.length > 0) {
+      db.wishList = wishData;
+    }
+
     sc(db);
   } catch(e) {
     console.log('Sheets load failed, using local cache:', e);
@@ -543,13 +574,14 @@ function nav(p) {
   document.querySelectorAll('.nb,.mb').forEach(x => x.classList.remove('on'));
   const pg = document.getElementById('page-' + p);
   if (pg) pg.classList.add('on');
-  const idx = {dash:0, mission:1, task:2, review:3, memo:4}[p];
+  const idx = {dash:0, mission:1, task:2, review:3, memo:4, wish:5}[p];
   document.querySelectorAll('.nb')[idx]?.classList.add('on');
   document.querySelectorAll('.mb')[idx]?.classList.add('on');
   if (p === 'review') updReview();
   if (p === 'dash') updDash();
   if (p === 'task') renderTasks();
   if (p === 'memo') { buildMemoTabs(); renderMemos(); }
+  if (p === 'wish') renderWishList();
   window.scrollTo(0, 0);
 }
 
@@ -725,6 +757,10 @@ function togM(i) {
       .then(ok => {
         setSync('m', ok ? 'ok' : 'err');
         togMBusy = false;
+      })
+      .catch(() => {
+        setSync('m', 'err');
+        togMBusy = false;
       });
   }, 500);
 }
@@ -756,8 +792,8 @@ function updDash() {
   document.getElementById('d-done').textContent = `${done}/${ms.length || 0}`;
   document.getElementById('d-str').textContent = db.streak || 0;
   document.getElementById('sb-str').textContent = db.streak || 0;
-  const wa = new Date(now); wa.setDate(wa.getDate() - 7);
-  const wk = wa.toISOString().split('T')[0];
+  const wa = new Date(tk + 'T12:00:00+09:00'); wa.setDate(wa.getDate() - 7);
+  const wk = isoJST(wa);
   const wt = Object.entries(db.doneMap || {}).filter(([d]) => d >= wk).reduce((s,[,v]) => s + v.length, 0);
   document.getElementById('d-week').textContent = wt;
   document.getElementById('d-tasks').textContent = (db.tasks || []).filter(t => !t.done).length;
@@ -1078,8 +1114,8 @@ function formatDateJP(isoDate) {
 
 // ===== REVIEW =====
 function updReview() {
-  const wa = new Date(now); wa.setDate(wa.getDate() - 7);
-  const wk = wa.toISOString().split('T')[0];
+  const wa = new Date(tk + 'T12:00:00+09:00'); wa.setDate(wa.getDate() - 7);
+  const wk = isoJST(wa);
   const wt = Object.entries(db.doneMap || {}).filter(([d]) => d >= wk).reduce((s,[,v]) => s + v.length, 0);
   document.getElementById('r-m').textContent = wt;
   document.getElementById('r-s').textContent = db.streak || 0;
@@ -1088,8 +1124,8 @@ function updReview() {
   const dayLabels = ['日','月','火','水','木','金','土'];
   let bh = '';
   for (let i = 0; i < 7; i++) {
-    const d = new Date(now); d.setDate(d.getDate() - (6-i));
-    const dk = d.toISOString().split('T')[0];
+    const d = new Date(tk + 'T12:00:00+09:00'); d.setDate(d.getDate() - (6-i));
+    const dk = isoJST(d);
     const dayLabel = dayLabels[d.getDay()];
     const c = (db.doneMap[dk] || []).length;
     const h = c > 0 ? Math.max(8, Math.min(48, c*16)) : 4;
@@ -1177,10 +1213,56 @@ async function checkUrlTask() {
   nav('task');
 }
 
+// ===== やりたいことメモ =====
+async function addWish() {
+  const input = document.getElementById('wish-input');
+  const text = input.value.trim();
+  if (!text) { toast('内容を入力してください'); return; }
+  const item = {
+    id: Date.now(),
+    text: text,
+    date: tk,
+    dateStr: now.toLocaleDateString('ja-JP')
+  };
+  db.wishList = db.wishList || [];
+  db.wishList.push(item);
+  sc(db);
+  input.value = '';
+  renderWishList();
+  toast('✅ やりたいことに追加しました');
+  await gasPost({ action: 'saveWish', id: item.id, text: item.text, date: item.date });
+}
+
+async function delWish(id) {
+  db.wishList = (db.wishList || []).filter(w => w.id !== id);
+  sc(db);
+  renderWishList();
+  await gasPost({ action: 'deleteWish', id: id });
+}
+
+function renderWishList() {
+  const el = document.getElementById('wish-list');
+  if (!el) return;
+  const list = db.wishList || [];
+  if (list.length === 0) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--t3);padding:8px 0;">まだありません。気軽に追加してみてください！</div>';
+    return;
+  }
+  el.innerHTML = list.slice().reverse().map(w =>
+    `<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 0;border-bottom:1px solid var(--b);">
+      <div style="flex:1;">
+        <div style="font-size:14px;color:var(--t);line-height:1.5;">${w.text}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:2px;">${w.dateStr || w.date}</div>
+      </div>
+      <button onclick="delWish(${w.id})" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:16px;padding:0 4px;flex-shrink:0;" title="削除">✕</button>
+    </div>`
+  ).join('');
+}
+
 // ===== 週次レポートコピー =====
 function copyWeeklyReport() {
-  const wa = new Date(now); wa.setDate(wa.getDate() - 7);
-  const wk = wa.toISOString().split('T')[0];
+  const wa = new Date(tk + 'T12:00:00+09:00'); wa.setDate(wa.getDate() - 7);
+  const wk = isoJST(wa);
   const missionDone = Object.entries(db.doneMap || {}).filter(([d]) => d >= wk).reduce((s,[,v]) => s + v.length, 0);
   const taskDone = (db.tasks || []).filter(t => t.done && t.date >= wk);
   const mHistory = (db.missionHistory || []).filter(m => m.date >= wk);
@@ -1191,6 +1273,12 @@ function copyWeeklyReport() {
   const mLines = mHistory.length
     ? [...new Set(mHistory.map(m => `  ・${m.cat} ${m.title}`))].join('\n')
     : '  （なし）';
+
+  // 今週追加したやりたいことメモ
+  const wishes = (db.wishList || []).filter(w => w.date >= wk);
+  const wishLines = wishes.length
+    ? wishes.map(w => `  ・${w.text}`).join('\n')
+    : '  （今週の追加なし）';
 
   const report = `📊 週次レポート ${formatDateJP(wk)} 〜 ${formatDateJP(tk)}
 ━━━━━━━━━━━━━━━━━━
@@ -1204,6 +1292,9 @@ ${taskLines}
 
 【達成ミッション】
 ${mLines}
+
+【今週追加したやりたいこと】
+${wishLines}
 ━━━━━━━━━━━━━━━━━━
 ↑ このレポートをClaudeに貼り付けてコーチングを受けてください`;
 
@@ -1551,7 +1642,9 @@ init();
 
 // 日付変わり検知：1分ごとにチェックして日付が変わったら自動リロード
 setInterval(() => {
-  const currentDate = new Date().toISOString().split('T')[0];
+  const d2 = new Date();
+  const jst2 = new Date(d2.toLocaleString('en-US', {timeZone: 'Asia/Tokyo'}));
+  const currentDate = jst2.getFullYear() + '-' + String(jst2.getMonth()+1).padStart(2,'0') + '-' + String(jst2.getDate()).padStart(2,'0');
   if (currentDate !== tk) {
     location.reload();
   }
@@ -1599,6 +1692,7 @@ setInterval(() => {
         const cur = document.querySelector('.page.on');
         if (cur?.id === 'page-memo') { buildMemoTabs(); renderMemos(); }
         if (cur?.id === 'page-review') updReview();
+        if (cur?.id === 'page-wish') renderWishList();
         togMBusy = false; // ロック解除
         indicator.textContent = '✓ 更新しました';
         setTimeout(() => indicator.classList.remove('show'), 1200);
