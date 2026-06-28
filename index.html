@@ -579,6 +579,7 @@ function nav(p) {
   document.querySelectorAll('.mb')[idx]?.classList.add('on');
   if (p === 'review') updReview();
   if (p === 'dash') updDash();
+  if (p === 'mission') { buildDayPills(); renderMissions(); }
   if (p === 'task') renderTasks();
   if (p === 'memo') { buildMemoTabs(); renderMemos(); }
   if (p === 'wish') renderWishList();
@@ -1640,14 +1641,24 @@ setTimeout(() => {
 
 init();
 
-// 日付変わり検知：1分ごとにチェックして日付が変わったら自動リロード
+// 日付変わり検知 + バックグラウンド自動同期（60秒ごと）
 setInterval(() => {
+  // 日付変わり検知
   const d2 = new Date();
   const jst2 = new Date(d2.toLocaleString('en-US', {timeZone: 'Asia/Tokyo'}));
   const currentDate = jst2.getFullYear() + '-' + String(jst2.getMonth()+1).padStart(2,'0') + '-' + String(jst2.getDate()).padStart(2,'0');
-  if (currentDate !== tk) {
-    location.reload();
-  }
+  if (currentDate !== tk) { location.reload(); return; }
+
+  // チェック操作中は同期しない（togMBusyがfalseの時のみ）
+  if (togMBusy) return;
+  togMBusy = true;
+  loadFromSheets().then(() => {
+    buildDayPills();
+    renderMissions();
+    renderTasks();
+    updDash();
+    togMBusy = false;
+  }).catch(() => { togMBusy = false; });
 }, 60000);
 
 // ===== プルトゥリフレッシュ =====
