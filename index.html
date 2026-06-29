@@ -271,24 +271,19 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
 
     <!-- TASK -->
     <div class="page" id="page-task">
-      <div class="ph"><div><div class="ph-t">タスク管理</div><div class="ph-s">貼り付けてカード化 → ドラッグで順番変更</div></div></div>
+      <div class="ph"><div><div class="ph-t">タスク管理</div><div class="ph-s">クライアントを選んでタスクを追加</div></div></div>
+      <!-- タスクタブ（上部） -->
+      <div class="day-pills" id="task-tabs" style="margin-bottom:1rem;"></div>
+      <!-- タスク入力（選択中クライアントに紐づく） -->
       <div class="task-input-wrap">
-        <label>📋 今日のタスクをここに貼り付けてください（箇条書きでOK）</label>
-        <textarea class="ta" id="traw" placeholder="・東映、請求書作成&#10;・Olu.スタレコ導入したい&#10;・HEMO、ショート動画編集&#10;・川辺、Grwaveウィッシュリスト対応"></textarea>
+        <label id="task-input-label">📋 タスクを貼り付けてください（箇条書きでOK）</label>
+        <textarea class="ta" id="traw" placeholder="・スタレコ導入調査&#10;・GA4確認&#10;・タグ対応"></textarea>
         <button class="btn bp" onclick="parseTasks()" style="width:100%;justify-content:center">↓ カードに変換する</button>
       </div>
       <div class="add-inline">
         <input type="text" class="add-fi" id="add-name" placeholder="タスクを1件追加...">
-        <select class="add-fs" id="add-cat">
-          <option value="shopify">Shopify</option>
-          <option value="youtube">YouTube</option>
-          <option value="short">ショート動画</option>
-          <option value="other">その他</option>
-        </select>
         <button class="btn bp bsm" onclick="addSingle()">追加</button>
       </div>
-      <!-- タスクタブ -->
-      <div class="day-pills" id="task-tabs" style="margin-bottom:1rem;"></div>
       <div class="task-board">
         <div class="tbh"><h3 id="task-tab-label">今日のタスク</h3><span style="font-size:12px;color:var(--t3)" id="task-count"></span></div>
         <div id="task-list"></div>
@@ -876,11 +871,13 @@ async function parseTasks() {
   const lines = raw.split('\n').map(l => l.replace(/^[・\-\*\d\.\s　]+/, '').trim()).filter(l => l.length > 1);
   if (!lines.length) { toast('タスクが見つかりませんでした'); return; }
   const dateStrJP = now.toLocaleDateString('ja-JP');
+  // 特定クライアントが選択中ならそのクライアントを優先
+  const activeClient = (selectedTaskTab !== 'today' && selectedTaskTab !== 'all') ? selectedTaskTab : null;
   const newTasks = lines.map(l => ({
     id: Date.now() + Math.random(),
     name: l,
     cat: detectCat(l),
-    client: detectClient(l),
+    client: activeClient || detectClient(l),
     done: false,
     date: tk,
     dateStr: dateStrJP
@@ -902,7 +899,8 @@ async function addSingle() {
   const name = document.getElementById('add-name').value.trim();
   if (!name) return;
   const dateStrJP = now.toLocaleDateString('ja-JP');
-  const t = { id: Date.now(), name, cat: document.getElementById('add-cat').value, client: null, done: false, date: tk, dateStr: dateStrJP };
+  const activeClient = (selectedTaskTab !== 'today' && selectedTaskTab !== 'all') ? selectedTaskTab : null;
+  const t = { id: Date.now(), name, cat: detectCat(name), client: activeClient, done: false, date: tk, dateStr: dateStrJP };
   db.tasks.push(t);
   sc(db); renderTasks(); updDash();
   document.getElementById('add-name').value = '';
@@ -1036,6 +1034,15 @@ function selectTaskTab(tab) {
   selectedTaskTab = tab;
   buildTaskTabs();
   renderTaskList();
+  // 入力ラベルをクライアント名に更新
+  const labelEl = document.getElementById('task-input-label');
+  if (labelEl) {
+    if (tab === 'today' || tab === 'all') {
+      labelEl.textContent = '📋 タスクを貼り付けてください（箇条書きでOK）';
+    } else {
+      labelEl.textContent = `📋 ${tab} のタスクを入力（クライアント名は自動で設定されます）`;
+    }
+  }
 }
 
 function renderTasks() {
