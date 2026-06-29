@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'missions.json'
+  workflow_dispatch:
 jobs:
   send-missions:
     runs-on: ubuntu-latest
