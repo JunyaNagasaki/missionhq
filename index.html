@@ -258,6 +258,11 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
     <div class="page" id="page-mission">
       <div class="ph"><div><div class="ph-t">今日のミッション</div><div class="ph-s" id="m-sub">今日のクエストをこなそう</div></div></div>
       <div class="prog-w"><div class="prog-b" id="prog" style="width:0%"></div></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <button onclick="changeWeek(-1)" style="background:var(--bg2);border:1px solid var(--b2);border-radius:8px;padding:6px 12px;color:var(--t2);cursor:pointer;font-size:13px;white-space:nowrap;">← 前週</button>
+        <div id="week-label" style="flex:1;text-align:center;font-size:12px;color:var(--t3);"></div>
+        <button onclick="changeWeek(1)" style="background:var(--bg2);border:1px solid var(--b2);border-radius:8px;padding:6px 12px;color:var(--t2);cursor:pointer;font-size:13px;white-space:nowrap;">次週 →</button>
+      </div>
       <div class="day-pills" id="day-pills"></div>
 
       <div id="m-list"></div>
@@ -604,34 +609,73 @@ function catColor(cat) {
 // ローカルキャッシュから初期値を読み込む（チラつき防止）
 let missionDefs = db.missionDefs || {};
 
-// 直近7日の日付リスト（今日を含む過去7日・JST基準）
-function getLast7Dates() {
+// 週ナビゲーション
+let currentWeekOffset = 0; // 0=今週, -1=先週, +1=来週
+let selectedDate = tk; // 選択中の日付（YYYY-MM-DD）
+
+// 指定オフセット週の月曜日を取得（JST基準）
+function getWeekMonday(offset) {
+  const today = new Date(tk + 'T12:00:00+09:00');
+  const dow = today.getDay(); // 0=日, 1=月...6=土
+  const daysFromMon = dow === 0 ? 6 : dow - 1; // 月曜を週の開始に
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - daysFromMon + offset * 7);
+  return monday;
+}
+
+// 指定週の7日間の日付リストを返す
+function getWeekDates(offset) {
+  const monday = getWeekMonday(offset);
   const dates = [];
-  for (let i = 6; i >= 0; i--) {
-    // tkはYYYY-MM-DD文字列（JST）→ 正午で Date化してズレ防止
-    const base = new Date(tk + 'T12:00:00+09:00');
-    base.setDate(base.getDate() - i);
-    const y = base.getFullYear();
-    const m = String(base.getMonth() + 1).padStart(2, '0');
-    const d2 = String(base.getDate()).padStart(2, '0');
-    dates.push(y + '-' + m + '-' + d2);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    dates.push(isoJST(d));
   }
   return dates;
 }
 
-let selectedDate = tk; // 選択中の日付（YYYY-MM-DD）
+// 週移動
+function changeWeek(delta) {
+  currentWeekOffset += delta;
+  // 移動先の週の月曜日を選択
+  const dates = getWeekDates(currentWeekOffset);
+  // 今週なら今日、それ以外は週の月曜日を選択
+  if (currentWeekOffset === 0) {
+    selectedDate = tk;
+  } else {
+    selectedDate = dates[0];
+  }
+  buildDayPills();
+  renderMissions();
+}
 
 function buildDayPills() {
-  const dates = getLast7Dates();
+  const dates = getWeekDates(currentWeekOffset);
   const DJ2 = ['日','月','火','水','木','金','土'];
+
+  // 週ラベル更新
+  const first = dates[0];
+  const last = dates[6];
+  const f = new Date(first + 'T12:00:00+09:00');
+  const l = new Date(last + 'T12:00:00+09:00');
+  const weekLabel = `${f.getMonth()+1}/${f.getDate()}（月）〜 ${l.getMonth()+1}/${l.getDate()}（日）`;
+  const weekEl = document.getElementById('week-label');
+  if (weekEl) {
+    const offsetLabel = currentWeekOffset === 0 ? '今週' : currentWeekOffset === -1 ? '先週' : currentWeekOffset === 1 ? '来週' : `${currentWeekOffset > 0 ? '+' : ''}${currentWeekOffset}週`;
+    weekEl.textContent = `${offsetLabel}：${weekLabel}`;
+  }
+
   document.getElementById('day-pills').innerHTML = dates.map(d => {
-    const dateObj = new Date(d + 'T12:00:00');
+    const dateObj = new Date(d + 'T12:00:00+09:00');
     const mon = String(dateObj.getMonth() + 1);
-    const day = String(dateObj.getDate());
+    const day2 = String(dateObj.getDate());
     const dow2 = DJ2[dateObj.getDay()];
-    const label = `${mon}/${day}（${dow2}）`;
+    const label = `${mon}/${day2}（${dow2}）`;
     const isSelected = d === selectedDate;
-    return `<button class="dp ${isSelected?'on':''}" onclick="selectDate('${d}')">${label}</button>`;
+    const isToday2 = d === tk;
+    return `<button class="dp ${isSelected?'on':''}" onclick="selectDate('${d}')" style="${isToday2&&!isSelected?'border-color:var(--pu);':''}">` +
+      `${isToday2&&!isSelected?'<span style="font-size:9px;color:var(--pu);display:block;line-height:1;">今日</span>':''}${label}</button>`;
   }).join('');
 }
 
