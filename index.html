@@ -1641,7 +1641,7 @@ setTimeout(() => {
 
 init();
 
-// 日付変わり検知 + バックグラウンド自動同期（60秒ごと）
+// 日付変わり検知 + バックグラウンド自動同期（5分ごと）
 setInterval(() => {
   // 日付変わり検知
   const d2 = new Date();
@@ -1659,7 +1659,7 @@ setInterval(() => {
     updDash();
     togMBusy = false;
   }).catch(() => { togMBusy = false; });
-}, 60000);
+}, 300000); // 5分ごと
 
 // ===== プルトゥリフレッシュ =====
 (function() {
