@@ -198,8 +198,8 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
     <button class="mb on" onclick="nav('dash')"><i class="ti ti-layout-dashboard"></i>ホーム</button>
     <button class="mb" onclick="nav('mission')"><i class="ti ti-target"></i>ミッション</button>
     <button class="mb" onclick="nav('task')"><i class="ti ti-checklist"></i>タスク</button>
-    <button class="mb" onclick="nav('review')"><i class="ti ti-chart-bar"></i>振り返り</button>
     <button class="mb" onclick="nav('memo')"><i class="ti ti-notebook"></i>メモ</button>
+    <button class="mb" onclick="nav('review')"><i class="ti ti-chart-bar"></i>振り返り</button>
     <button class="mb" onclick="nav('wish')"><i class="ti ti-bulb"></i>やりたい</button>
   </div>
 </nav>
@@ -212,8 +212,8 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
       <button class="nb on" onclick="nav('dash')"><i class="ti ti-layout-dashboard"></i> ダッシュボード</button>
       <button class="nb" onclick="nav('mission')"><i class="ti ti-target"></i> ミッション</button>
       <button class="nb" onclick="nav('task')"><i class="ti ti-checklist"></i> タスク管理</button>
-      <button class="nb" onclick="nav('review')"><i class="ti ti-chart-bar"></i> 振り返り</button>
       <button class="nb" onclick="nav('memo')"><i class="ti ti-notebook"></i> 案件メモ</button>
+      <button class="nb" onclick="nav('review')"><i class="ti ti-chart-bar"></i> 振り返り</button>
       <button class="nb" onclick="nav('wish')"><i class="ti ti-bulb"></i> やりたいことメモ</button>
     </div>
     <div class="streak-box">
@@ -571,7 +571,7 @@ function nav(p) {
   document.querySelectorAll('.nb,.mb').forEach(x => x.classList.remove('on'));
   const pg = document.getElementById('page-' + p);
   if (pg) pg.classList.add('on');
-  const idx = {dash:0, mission:1, task:2, review:3, memo:4, wish:5}[p];
+  const idx = {dash:0, mission:1, task:2, memo:3, review:4, wish:5}[p];
   document.querySelectorAll('.nb')[idx]?.classList.add('on');
   document.querySelectorAll('.mb')[idx]?.classList.add('on');
   if (p === 'review') updReview();
