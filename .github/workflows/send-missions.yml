@@ -1,0 +1,37 @@
+name: ミッション反映
+on:
+  push:
+    paths:
+      - 'missions.json'
+
+jobs:
+  send-missions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ミッションをアプリに送信
+        run: |
+          python3 - << 'EOF'
+import json, urllib.request
+
+with open('missions.json', encoding='utf-8') as f:
+    data = json.load(f)
+
+url = 'https://dreamy-strudel-2ef597.netlify.app/.netlify/functions/set-missions'
+all_ok = True
+for day in data:
+    req = urllib.request.Request(url,
+        data=json.dumps(day, ensure_ascii=False).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST')
+    try:
+        res = urllib.request.urlopen(req)
+        result = res.read().decode()
+        print(f"✅ {day['date']}: {result}")
+    except Exception as e:
+        print(f"❌ {day['date']}: {e}")
+        all_ok = False
+
+if not all_ok:
+    exit(1)
+EOF
