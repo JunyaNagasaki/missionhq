@@ -1,0 +1,15 @@
+name: 毎朝の通知送信
+on:
+  schedule:
+    - cron: '0 0 * * *'  # UTC 0:00 = JST 9:00
+  workflow_dispatch:
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send push notification
+        run: |
+          curl -s -X POST https://dreamy-strudel-2ef597.netlify.app/.netlify/functions/send-notification \
+            -H "Content-Type: application/json" \
+            -d '{"title":"Mission HQ","body":"今日のミッションを確認しよう！"}'
