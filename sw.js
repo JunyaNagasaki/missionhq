@@ -1,4 +1,4 @@
-const CACHE_NAME = 'missionhq-v5';
+const CACHE_NAME = 'missionhq-v6';
 const ASSETS = ['/'];
 
 // インストール：キャッシュ登録
@@ -19,13 +19,32 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// フェッチ：キャッシュ優先、なければネットワーク
+// フェッチ戦略：HTMLはネットワーク優先、その他はキャッシュ優先
 self.addEventListener('fetch', e => {
   // GASへのリクエストはキャッシュしない
   if (e.request.url.includes('script.google.com')) return;
-  e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
-  );
+  // netlify functionsもキャッシュしない
+  if (e.request.url.includes('/.netlify/functions/')) return;
+
+  const isHTML = e.request.headers.get('accept')?.includes('text/html');
+
+  if (isHTML) {
+    // HTMLはネットワーク優先（常に最新を取得）、失敗時のみキャッシュ
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(e.request, copy));
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+  } else {
+    // CSS/JS/画像等はキャッシュ優先
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request))
+    );
+  }
 });
 
 // プッシュ通知
