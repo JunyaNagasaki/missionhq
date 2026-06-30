@@ -1355,40 +1355,54 @@ ${wishLines}
 }
 
 // ===== PWA通知 =====
-async function requestNotification() {
-  if (!('Notification' in window)) { toast('このブラウザは通知非対応です'); return; }
-  const perm = await Notification.requestPermission();
-  if (perm === 'granted') {
-    toast('✓ 通知を許可しました');
-    scheduleNotifications();
-  } else {
-    toast('通知が拒否されました。ブラウザ設定から許可してください');
-  }
+const VAPID_PUBLIC_KEY = 'BE7NGlXfMxIX-HrmL632akauySo9BXa5Qhe3Q9JkKDhF-FRbTVZTnLdXbgs3wRSulgFn_LdWPA0K8rqP8vgcy8U';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
 }
 
-function scheduleNotifications() {
-  // Service Workerがあれば登録
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+async function requestNotification() {
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    toast('このブラウザはプッシュ通知非対応です'); return;
   }
-  // シンプルな毎日リマインダー（ページが開いている時だけ）
-  const now2 = new Date();
-  const next9 = new Date(now2); next9.setHours(9, 0, 0, 0);
-  if (next9 <= now2) next9.setDate(next9.getDate() + 1);
-  const ms = next9 - now2;
-  setTimeout(() => {
-    if (Notification.permission === 'granted') {
-      new Notification('Mission HQ', {
-        body: '今日のミッションを確認しよう！',
-        icon: '/icon-192.png'
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    toast('通知が拒否されました。ブラウザ設定から許可してください');
+    return;
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+
+    let subscription = await reg.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
     }
-    setInterval(() => {
-      if (Notification.permission === 'granted') {
-        new Notification('Mission HQ', { body: '今日のミッションを確認しよう！', icon: '/icon-192.png' });
-      }
-    }, 86400000);
-  }, ms);
+
+    // GASに購読情報を保存
+    const subId = 'sub_' + Date.now();
+    await gasPost({
+      action: 'saveSubscription',
+      id: subId,
+      subscription: JSON.stringify(subscription)
+    });
+
+    db.pushSubId = subId;
+    sc(db);
+    toast('✓ 毎朝9時に通知が届くようになりました');
+  } catch (err) {
+    console.error('Push subscribe failed:', err);
+    toast('通知登録に失敗しました');
+  }
 }
 
 // ===== MEMO =====
@@ -1678,7 +1692,7 @@ async function init() {
   });
 
   // ⑤ PWA通知（許可済みならスケジュール）
-  if (Notification?.permission === 'granted') scheduleNotifications();
+  // 通知は requestNotification() で初回登録時にPush Subscription済み（再登録不要）
 }
 
 // フェイルセーフ：3秒経ってもローディングが残ってたら強制消去
